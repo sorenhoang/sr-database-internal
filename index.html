@@ -1,0 +1,258 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Database Internals Deep Dive</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='14' fill='%23c2410c'/%3E%3Cpath d='M22 21 11 32l11 11M42 21l11 11-11 11M36 15l-8 34' fill='none' stroke='white' stroke-width='5' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E">
+<style>
+  :root {
+    --bg: #f7f7f5; --surface: #ffffff; --ink: #1c1c1a; --muted: #6b6b66;
+    --line: #e4e4df; --accent: #c2410c; --accent-soft: #fff1e8; --done: #15803d; --done-soft: #e8f6ec;
+    --danger: #b91c1c; --danger-soft: #fdecec;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #141413; --surface: #1c1c1a; --ink: #ecece8; --muted: #9a9a93;
+      --line: #2e2e2b; --accent: #fb923c; --accent-soft: #2d1d12; --done: #4ade80; --done-soft: #12261a;
+      --danger: #f87171; --danger-soft: #2a1414;
+    }
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; height: 100vh; display: grid; grid-template-columns: 310px 1fr;
+    font: 15px/1.6 system-ui, -apple-system, "Segoe UI", sans-serif; background: var(--bg); color: var(--ink);
+  }
+  a { color: inherit; text-decoration: none; }
+  a:focus-visible, summary:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+  aside { background: var(--surface); border-right: 1px solid var(--line); overflow-y: auto; padding: 24px 14px; }
+  .brand { display: block; font-weight: 800; font-size: 19px; letter-spacing: -.01em; padding: 0 8px; }
+  .progress { padding: 6px 8px 18px; color: var(--muted); font-size: 13px; }
+  .bar { height: 6px; background: var(--line); border-radius: 99px; margin-top: 6px; overflow: hidden; }
+  .bar > i { display: block; height: 100%; background: var(--done); }
+
+  details { border-top: 1px solid var(--line); }
+  summary {
+    list-style: none; cursor: pointer; display: flex; justify-content: space-between; gap: 8px;
+    padding: 10px 8px; font-weight: 650; font-size: 14px;
+  }
+  summary::-webkit-details-marker { display: none; }
+  summary::before { content: "▸"; color: var(--muted); transition: transform .15s; }
+  details[open] summary::before { transform: rotate(90deg); }
+  summary .label { flex: 1; }
+  .count { color: var(--muted); font-weight: 500; font-variant-numeric: tabular-nums; }
+  nav a {
+    display: flex; align-items: center; gap: 8px; padding: 6px 8px 6px 26px; border-radius: 6px;
+    font-size: 14px; color: var(--muted);
+  }
+  nav a:hover { background: var(--bg); color: var(--ink); }
+  nav a.active { background: var(--accent-soft); color: var(--accent); font-weight: 600; }
+  nav a.learned { color: var(--ink); }
+  nav .name { flex: 1; }
+  .num { font-variant-numeric: tabular-nums; font-size: 12px; color: var(--muted); min-width: 22px; }
+
+  .badge {
+    font-size: 11px; font-weight: 600; padding: 1px 8px; border-radius: 99px; white-space: nowrap;
+    background: var(--bg); color: var(--muted); border: 1px solid var(--line);
+  }
+  .badge.done { background: var(--done-soft); color: var(--done); border-color: transparent; }
+
+  main { overflow-y: auto; padding: 48px 56px 80px; }
+  main > * { max-width: 920px; }
+  h1 { font-size: 34px; line-height: 1.2; letter-spacing: -.02em; margin: 0 0 8px; }
+  .lead { color: var(--muted); margin: 0 0 40px; }
+  section { margin-bottom: 44px; }
+  section h2 { font-size: 20px; margin: 0; }
+  section h2 a:hover { color: var(--accent); }
+  section > p { color: var(--muted); margin: 4px 0 16px; }
+  section > p.refs { font-size: 13px; margin-top: -10px; }
+  .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(210px, 1fr)); gap: 12px; }
+  .card {
+    background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 14px;
+    display: flex; flex-direction: column; gap: 6px; align-items: flex-start;
+  }
+  .card:hover { border-color: var(--accent); }
+  .card b { font-size: 15px; }
+
+  .crumb { color: var(--muted); font-size: 14px; margin-bottom: 10px; display: inline-block; }
+  .crumb:hover { color: var(--accent); }
+  .soon {
+    margin-top: 28px; padding: 40px; text-align: center; border: 1px dashed var(--line);
+    border-radius: 12px; color: var(--muted); background: var(--surface);
+  }
+  .soon strong { display: block; font-size: 22px; color: var(--ink); margin-bottom: 4px; }
+
+  .content { margin-top: 24px; }
+  .content h2 { font-size: 22px; margin: 32px 0 8px; }
+  .content h3 { font-size: 17px; margin: 24px 0 6px; }
+  .content code { background: var(--surface); border: 1px solid var(--line); border-radius: 4px; padding: 0 4px; font-size: 13px; }
+  .content pre { tab-size: 4; background: var(--surface); border: 1px solid var(--line); border-radius: 8px; padding: 14px; overflow-x: auto; }
+  .content pre code { border: 0; padding: 0; }
+  .content table { border-collapse: collapse; width: 100%; }
+  .content th, .content td { border: 1px solid var(--line); padding: 6px 10px; text-align: left; }
+  .content blockquote { margin: 16px 0; padding: 8px 16px; border-left: 3px solid var(--accent); background: var(--surface); }
+  .content a { color: var(--accent); text-decoration: underline; text-underline-offset: 2px; }
+  .content .tldr { font-size: 17px; padding: 14px 18px; border-radius: 10px; background: var(--accent-soft); margin: 0 0 8px; }
+  .content .callout { padding: 12px 16px; border-radius: 10px; border: 1px solid var(--line); background: var(--surface); }
+  .content .callout.warn { border-left: 4px solid var(--danger); }
+  .content .callout.tip { border-left: 4px solid var(--done); }
+
+  /* Diagrams: inline SVGs use these classes so they follow light/dark theme. */
+  .diagram { margin: 20px 0; padding: 16px; border: 1px solid var(--line); border-radius: 12px; background: var(--surface); }
+  .diagram svg { display: block; width: 100%; height: auto; max-height: 520px; }
+  .diagram figcaption { color: var(--muted); font-size: 13px; text-align: center; margin-top: 8px; }
+  .diagram text { fill: var(--ink); font: 13px system-ui, sans-serif; }
+  .diagram text.small { font-size: 11px; fill: var(--muted); }
+  .diagram text.title { font-weight: 700; }
+  .diagram .box { fill: var(--bg); stroke: var(--ink); stroke-width: 1.4; }
+  .diagram .box.accent { fill: var(--accent-soft); stroke: var(--accent); }
+  .diagram .box.ok { fill: var(--done-soft); stroke: var(--done); }
+  .diagram .box.bad { fill: var(--danger-soft); stroke: var(--danger); }
+  .diagram .box.muted { stroke: var(--line); }
+  .diagram .line { fill: none; stroke: var(--ink); stroke-width: 1.4; }
+  .diagram .line.accent { stroke: var(--accent); }
+  .diagram .line.ok { stroke: var(--done); }
+  .diagram .line.bad { stroke: var(--danger); }
+  .diagram .line.dashed { stroke-dasharray: 5 4; }
+  .diagram .arrowhead { fill: var(--ink); }
+
+  @media (max-width: 760px) {
+    body { grid-template-columns: 1fr; height: auto; }
+    aside { border-right: 0; border-bottom: 1px solid var(--line); max-height: 50vh; }
+    main { padding: 28px 20px 60px; }
+  }
+</style>
+</head>
+<body>
+<aside>
+  <a class="brand" href="#">Database Internals</a>
+  <div class="progress"><span id="progress-text"></span><div class="bar"><i id="progress-bar"></i></div></div>
+  <nav id="nav"></nav>
+</aside>
+<main id="main"></main>
+
+<!--
+  Learned concepts: content/<group>.js registers CONTENT["<concept-slug>"] = `…HTML…`;
+  add a <script src="content/<group>.js"></script> tag below for each group file.
+  A concept with content is "Learned"; every other concept shows "Coming soon".
+-->
+<script>const CONTENT = {};</script>
+
+<script>
+  const GROUPS = [
+    { name: "Foundations & DBMS Architecture", desc: "What a database engine is made of, and how a query travels through it.",
+      refs: "Database Internals ch.1 · Architecture of a Database System §1–2 · CMU 15-445 L01",
+      items: ["DBMS Architecture", "Life of a Query", "Memory- vs Disk-Based Engines", "Row vs Column Storage", "OLTP vs OLAP Workloads", "Data Files & Index Files", "Real-World Engine Anatomy"] },
+    { name: "Storage & File Formats", desc: "How rows become bytes on disk: pages, slots, encodings and integrity checks.",
+      refs: "Database Internals ch.3 · CMU 15-445 L03–L05 · PostgreSQL 14 Internals Part I",
+      items: ["HDD, SSD & Storage Hardware", "Pages & Blocks", "Slotted Pages", "Tuple Layout", "Variable-Size Data & Overflow Pages", "Binary Encoding", "Checksums & Torn Pages", "Real-World File Layout"] },
+    { name: "B-Tree Indexes", desc: "The default index of almost every relational database, from basic splits to lock-free variants.",
+      refs: "Database Internals ch.2, 4, 6 · Database System Concepts ch.14 · Use The Index, Luke!",
+      items: ["From BST to B-Tree", "B+Tree Structure", "Splits & Merges", "Node Layout & Fanout", "Key Compression", "B-Tree Concurrency & Latch Crabbing", "Copy-on-Write B-Trees", "Bw-Trees & Lazy B-Trees", "Clustered vs Secondary Indexes", "Real-World B-Tree"] },
+    { name: "LSM Trees & Log-Structured Storage", desc: "Trading read cost for write throughput: append, sort in memory, flush and compact.",
+      refs: "Database Internals ch.7 · DDIA (1st ed.) ch.3 · The Log-Structured Merge-Tree (O'Neil et al., 1996)",
+      items: ["Log-Structured Storage", "Memtables & SSTables", "Compaction Strategies", "Read, Write & Space Amplification", "Bloom Filters", "Skip Lists", "Tombstones & Deletes", "Key-Value Separation", "Real-World LSM Engine"] },
+    { name: "Other Index Structures", desc: "When a B-Tree is the wrong shape: hashing, bitmaps, text, geometry and vectors.",
+      refs: "Database System Concepts ch.14, 24 · PostgreSQL 14 Internals Part V · Use The Index, Luke!",
+      items: ["Hash Indexes", "Bitmap Indexes", "Inverted Indexes", "Spatial Indexes & R-Trees", "Vector Indexes", "Covering & Partial Indexes", "Choosing the Right Index"] },
+    { name: "Buffer Management", desc: "Keeping hot pages in memory and deciding which ones to evict.",
+      refs: "Database Internals ch.5 · CMU 15-445 L06 · Are You Sure You Want to Use MMAP in Your DBMS? (2022)",
+      items: ["Buffer Pool", "Page Replacement Policies", "Pinning & Dirty Pages", "Prefetching & Scan Sharing", "mmap vs Direct I/O", "Real-World Buffer Pool"] },
+    { name: "Transactions & Recovery", desc: "Making writes durable and atomic, and getting back to a correct state after a crash.",
+      refs: "Database Internals ch.5 · Transaction Processing (Gray & Reuter) · ARIES (Mohan et al., 1992)",
+      items: ["ACID", "Write-Ahead Logging", "Steal & Force Policies", "Checkpoints", "ARIES Recovery", "fsync & Group Commit", "Shadow Paging", "Real-World Crash Recovery"] },
+    { name: "Concurrency Control", desc: "Letting many transactions run at once without corrupting each other's view of the data.",
+      refs: "Database Internals ch.5 · DDIA (1st ed.) ch.7 · A Critique of ANSI SQL Isolation Levels (1995)",
+      items: ["Isolation Levels", "Concurrency Anomalies", "Two-Phase Locking", "Lock Manager & Deadlock Detection", "Latches vs Locks", "Optimistic Concurrency Control", "MVCC", "Snapshot Isolation", "Serializable Snapshot Isolation", "Version Garbage Collection", "Real-World MVCC"] },
+    { name: "Query Processing & Execution", desc: "Turning a plan into rows: operators, scans, joins and the models that run them.",
+      refs: "Architecture of a Database System §4 · Database System Concepts ch.15 · CMU 15-445 L10–L14",
+      items: ["Parsing & Binding", "Relational Algebra", "Execution Models", "Scan Methods", "Join Algorithms", "External Sorting & Aggregation", "Parallel Query Execution", "Real-World EXPLAIN"] },
+    { name: "Query Optimization", desc: "Picking a good plan out of millions, using statistics and a cost model.",
+      refs: "Access Path Selection (Selinger et al., 1979) · Database System Concepts ch.16 · CMU 15-445 L14–L15",
+      items: ["Query Rewriting", "Cost Models", "Statistics & Histograms", "Cardinality Estimation", "Join Ordering", "Plan Caching & Prepared Statements", "Real-World Plan Debugging"] },
+    { name: "Column Stores & Analytics", desc: "Engines built for scanning billions of rows: columnar layout, compression and vectorized execution.",
+      refs: "The Design and Implementation of Modern Column-Oriented DBs (Abadi et al.) · DDIA (1st ed.) ch.3 · CMU 15-721",
+      items: ["Columnar Layout", "Column Compression", "Late Materialization", "Vectorized Execution & SIMD", "Zone Maps", "Open Table Formats", "Real-World OLAP Engine"] },
+    { name: "Replication & Failure Detection", desc: "Keeping copies of data on several nodes and noticing when one of them is gone.",
+      refs: "Database Internals ch.9, 11, 12 · DDIA (1st ed.) ch.5 · Dynamo (DeCandia et al., 2007)",
+      items: ["Failure Detection", "Single-Leader Replication", "Multi-Leader Replication", "Leaderless Replication & Quorums", "Replication Lag", "Physical vs Logical Replication", "Change Data Capture", "Anti-Entropy & Merkle Trees", "Gossip Protocols", "CRDTs", "Real-World Replication"] },
+    { name: "Consistency & Consensus", desc: "Agreeing on one order of events across machines that fail and clocks that drift.",
+      refs: "Database Internals ch.10, 11, 14 · DDIA (1st ed.) ch.8–9 · In Search of an Understandable Consensus Algorithm (Raft)",
+      items: ["Consistency Models", "Linearizability", "Logical & Hybrid Clocks", "Leader Election Algorithms", "FLP Impossibility", "Paxos", "Raft", "Real-World Consensus"] },
+    { name: "Partitioning & Distributed Transactions", desc: "Splitting data across nodes and committing atomically when one transaction spans many of them.",
+      refs: "Database Internals ch.13 · DDIA (1st ed.) ch.6, 9 · Spanner (2012) · Calvin (2012) · Percolator (2010)",
+      items: ["Range vs Hash Partitioning", "Consistent Hashing", "Rebalancing", "Partitioned Secondary Indexes", "Two-Phase Commit", "Three-Phase Commit", "Deterministic Databases", "TrueTime & External Consistency", "Percolator-Style Transactions", "Real-World Distributed SQL"] },
+  ];
+
+  // Numbers follow display order; templates are keyed by slug so reordering never detaches content.
+  let seq = 0;
+  GROUPS.forEach((g, gi) => {
+    g.items = g.items.map((name) => ({
+      id: ++seq, name, gi, slug: name.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, ""),
+    }));
+  });
+  const ALL = GROUPS.flatMap((g) => g.items);
+  const isDone = (c) => c.slug in CONTENT;
+  const badge = (c) => isDone(c) ? `<span class="badge done">Learned</span>` : `<span class="badge">Coming soon</span>`;
+  const doneIn = (items) => items.filter(isDone).length;
+
+  const learned = doneIn(ALL);
+  document.getElementById("progress-text").textContent = `${learned} / ${ALL.length} learned`;
+  document.getElementById("progress-bar").style.width = `${(learned / ALL.length) * 100}%`;
+
+  const nav = document.getElementById("nav");
+  nav.innerHTML = GROUPS.map((g, gi) => `
+    <details id="nav-g${gi}">
+      <summary><span class="label">${g.name}</span><span class="count">${doneIn(g.items)}/${g.items.length}</span></summary>
+      ${g.items.map((c) => `
+        <a href="#${c.slug}" data-slug="${c.slug}" class="${isDone(c) ? "learned" : ""}">
+          <span class="num">${c.id}</span><span class="name">${c.name}</span>${isDone(c) ? `<span class="badge done">✓</span>` : `<span class="badge">Soon</span>`}
+        </a>`).join("")}
+    </details>`).join("");
+
+  const section = (g, gi) => `
+    <section>
+      <h2><a href="#g-${gi}">${g.name}</a> <span class="count">${doneIn(g.items)}/${g.items.length}</span></h2>
+      <p>${g.desc}</p>
+      <p class="refs">📚 ${g.refs}</p>
+      <div class="grid">
+        ${g.items.map((c) => `<a class="card" href="#${c.slug}"><span class="num">#${c.id}</span><b>${c.name}</b>${badge(c)}</a>`).join("")}
+      </div>
+    </section>`;
+
+  function render() {
+    const main = document.getElementById("main");
+    const hash = location.hash.slice(1);
+    const n = (hash.match(/^g-(\d+)$/) || [])[1];
+    const concept = ALL.find((c) => c.slug === hash);
+    const group = n !== undefined && GROUPS[+n];
+
+    nav.querySelectorAll("a").forEach((a) => a.classList.toggle("active", !!concept && a.dataset.slug === concept.slug));
+    main.scrollTop = 0;
+
+    if (concept) {
+      document.getElementById(`nav-g${concept.gi}`).open = true;
+      main.innerHTML = `
+        <a class="crumb" href="#g-${concept.gi}">← ${GROUPS[concept.gi].name}</a>
+        <h1>#${concept.id} ${concept.name}</h1>
+        ${badge(concept)}
+        <div class="content"></div>`;
+      main.querySelector(".content").innerHTML = CONTENT[concept.slug]
+        ?? `<div class="soon"><strong>Coming soon</strong>This concept hasn't been learned yet.</div>`;
+    } else if (group) {
+      document.getElementById(`nav-g${n}`).open = true;
+      main.innerHTML = `<a class="crumb" href="#">← All groups</a>${section(group, +n)}`;
+    } else {
+      main.innerHTML = `
+        <h1>Database Internals Deep Dive</h1>
+        <p class="lead">${ALL.length} concepts in ${GROUPS.length} groups · ${learned} learned</p>
+        ${GROUPS.map(section).join("")}`;
+    }
+  }
+
+  addEventListener("hashchange", render);
+  render();
+</script>
+</body>
+</html>
