@@ -1,6 +1,6 @@
 # sr-database-internal
 
-**Database Internals Deep Dive** is a single-page tracker for 117 database-engine concepts in 14 groups. The groups follow *Database Internals* (Alex Petrov): storage engines first, distributed systems second. Other classic books and papers fill the gaps.
+**Database Internals Deep Dive** is a single-page tracker for 179 database concepts in 23 groups. Groups 1–14 follow *Database Internals* (Alex Petrov): storage engines first, distributed systems second. Groups 15–23 apply that base to the NoSQL world, one data model per group. Other classic books and papers fill the gaps.
 
 **Live:** https://sorenhoang.github.io/sr-database-internal/
 
@@ -36,7 +36,7 @@ Load the file in `index.html` with `<script src="content/<group-slug>.js"></scri
 | 2 | Storage & File Formats | 8 | DI ch.3, CMU 15-445, PostgreSQL 14 Internals |
 | 3 | B-Tree Indexes | 10 | DI ch.2, 4, 6 |
 | 4 | LSM Trees & Log-Structured Storage | 9 | DI ch.7, DDIA ch.3 |
-| 5 | Other Index Structures | 7 | Database System Concepts, Use The Index, Luke! |
+| 5 | Other Index Structures | 5 | Database System Concepts, Use The Index, Luke! |
 | 6 | Buffer Management | 6 | DI ch.5, CMU 15-445 |
 | 7 | Transactions & Recovery | 8 | DI ch.5, Gray & Reuter, ARIES |
 | 8 | Concurrency Control | 11 | DI ch.5, DDIA ch.7 |
@@ -46,6 +46,15 @@ Load the file in `index.html` with `<script src="content/<group-slug>.js"></scri
 | 12 | Replication & Failure Detection | 11 | DI ch.9, 11, 12, DDIA ch.5, Dynamo |
 | 13 | Consistency & Consensus | 8 | DI ch.10, 11, 14, DDIA ch.8–9, Raft |
 | 14 | Partitioning & Distributed Transactions | 10 | DI ch.13, DDIA ch.6, Spanner, Calvin, Percolator |
+| 15 | NoSQL Foundations | 7 | NoSQL Distilled, DDIA ch.2, Seven Databases in Seven Weeks |
+| 16 | Key-Value Stores | 7 | Dynamo, DynamoDB (2022), FoundationDB, The DynamoDB Book |
+| 17 | In-Memory Data Stores | 7 | Redis in Action |
+| 18 | Document Databases | 8 | MongoDB: The Definitive Guide, NoSQL Distilled |
+| 19 | Wide-Column Stores | 8 | Bigtable, Cassandra, Cassandra: The Definitive Guide |
+| 20 | Graph Databases | 7 | Graph Databases (Robinson, Webber & Eifrem) |
+| 21 | Time-Series Databases | 6 | Gorilla, Prometheus TSDB |
+| 22 | Search Engines | 7 | Introduction to Information Retrieval, Lucene in Action |
+| 23 | Vector Databases | 7 | HNSW, FAISS, DiskANN |
 
 ## Reading list
 
@@ -57,6 +66,14 @@ Load the file in `index.html` with `<script src="content/<group-slug>.js"></scri
 - *PostgreSQL 14 Internals*, Egor Rogov
 - *SQL Performance Explained* / *Use The Index, Luke!*, Markus Winand
 - *Readings in Database Systems* ("The Red Book"), Bailis, Hellerstein & Stonebraker
+- *NoSQL Distilled*, Pramod Sadalage & Martin Fowler
+- *Seven Databases in Seven Weeks*, Perkins, Redmond & Wilson (2nd ed.)
+- *The DynamoDB Book*, Alex DeBrie
+- *Redis in Action*, Josiah Carlson
+- *MongoDB: The Definitive Guide*, Bradshaw, Brazil & Chodorow
+- *Cassandra: The Definitive Guide*, Jeff Carpenter & Eben Hewitt
+- *Graph Databases*, Ian Robinson, Jim Webber & Emil Eifrem
+- *Introduction to Information Retrieval*, Manning, Raghavan & Schütze
 
 **Papers & courses**
 - *Architecture of a Database System*, Hellerstein, Stonebraker & Hamilton (2007)
@@ -65,5 +82,7 @@ Load the file in `index.html` with `<script src="content/<group-slug>.js"></scri
 - *Access Path Selection in a Relational DBMS*, Selinger et al. (1979)
 - *The Log-Structured Merge-Tree*, O'Neil et al. (1996)
 - *Dynamo*, *Spanner*, *Calvin*, *Percolator*, *Raft*
+- *Bigtable* (2006), *Cassandra* (2009), *Amazon DynamoDB* (2022), *FoundationDB* (2021)
+- *Gorilla* (2015), *HNSW* (2016), *FAISS*, *DiskANN* (2019)
 - *Are You Sure You Want to Use MMAP in Your DBMS?*, Crotty, Leis & Pavlo (2022)
 - CMU 15-445 (Intro to Database Systems) and 15-721 (Advanced Database Systems), Andy Pavlo
